@@ -58,8 +58,9 @@ def recommend(title, cosine_sim=cosine_sim):
     return movies[['title', 'genres']].iloc[movie_indices]
 
 # User input
-movie_name = st.text_input(
-    "Enter a movie title"
+movie_name = st.selectbox(
+    "Choose a movie",
+    movies["title"].sort_values().values
 )
 
 # Button
