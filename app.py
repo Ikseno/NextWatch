@@ -66,22 +66,11 @@ movie_name = st.selectbox(
 # Button
 if st.button("Get Recommendations"):
 
-    try:
+    recommendations = recommend(movie_name)
 
-        recommendations = recommend(movie_name)
+    st.subheader("Recommended Movies")
 
-        st.subheader("Recommended Movies")
-
-        for i, row in recommendations.iterrows():
-
-            st.write(f"🎥 {row['title']}")
-
-            st.write(f"Genres: {row['genres']}")
-
-            st.write("---")
-
-    except:
-
-        st.error(
-            "Movie not found. Please enter the exact title from the dataset."
-        )
+    for i, row in recommendations.iterrows():
+        st.write(f"🎥 {row['title']}")
+        st.write(f"Genres: {row['genres']}")
+        st.write("---")
