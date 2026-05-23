@@ -6,6 +6,11 @@
 
 - clean up the interface : buttons don't display well --> DONE
 
+- full poster buttons --> DONE
+
+- add find similar for every card --> DONE
+
+- make the wishlist and watched tab more functional --> DONE
 
 - correct the recommendation system and make it work as said in the powerpoint 
 - make a separate tab for recommendation maybe first page cause most important 

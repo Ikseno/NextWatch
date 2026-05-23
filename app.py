@@ -243,6 +243,51 @@ def get_movie_info(title, api_key):
 
 
 @st.cache_data(show_spinner=False)
+def get_tv_info(title, api_key):
+    """Like get_movie_info but searches the TV endpoint."""
+    if not api_key:
+        return None, None, None
+    try:
+        r = requests.get(
+            "https://api.themoviedb.org/3/search/tv",
+            params={"api_key": api_key, "query": clean_title(title), "language": "en-US"}, timeout=5
+        )
+        res = r.json().get("results", [])
+        if res:
+            s = res[0]
+            poster = f"https://image.tmdb.org/t/p/w342{s['poster_path']}" if s.get("poster_path") else None
+            return poster, s["id"], s.get("vote_average")
+    except Exception:
+        pass
+    return None, None, None
+
+
+@st.cache_data(show_spinner=False)
+def get_media_info(title, api_key, genre_hint=""):
+    """Fetch poster/id/rating for a movie or TV show.
+    Uses genre_hint to try the right endpoint first, then falls back to the other.
+    Returns (poster, tmdb_id, rating, media_type) where media_type is 'movie' or 'tv'."""
+    if not api_key:
+        return None, None, None, "movie"
+    hint_tv = "TV Show" in str(genre_hint)
+    if hint_tv:
+        poster, tmdb_id, rating = get_tv_info(title, api_key)
+        if tmdb_id:
+            return poster, tmdb_id, rating, "tv"
+        poster, tmdb_id, rating = get_movie_info(title, api_key)
+        return poster, tmdb_id, rating, "movie"
+    else:
+        poster, tmdb_id, rating = get_movie_info(title, api_key)
+        if tmdb_id:
+            return poster, tmdb_id, rating, "movie"
+        # fall back to TV search for items like anime series or shows
+        poster, tmdb_id, rating = get_tv_info(title, api_key)
+        if tmdb_id:
+            return poster, tmdb_id, rating, "tv"
+        return None, None, None, "movie"
+
+
+@st.cache_data(show_spinner=False)
 def get_trailer_url(tmdb_id, api_key):
     if not tmdb_id or not api_key:
         return None
@@ -480,10 +525,8 @@ def show_movie_detail(mv, api_key):
                 st.session_state.watched[title] = 0
             st.rerun()
     with bc:
-        # "Find Similar" — populates the similar section in the Movies tab
-        local_matches = [t for t in movies["title"] if clean_title(t).lower() == clean_title(title).lower()]
-        if local_matches and st.button("🎭 Find Similar", key="dlg_mv_sim",
-                                        use_container_width=True, type="secondary"):
+        if st.button("🎭 Find Similar", key="dlg_mv_sim",
+                     use_container_width=True, type="secondary"):
             st.session_state._mv_seed    = mv
             st.session_state._mv_similar = get_similar_movies(mv["id"], api_key)
             st.session_state._mv_sim_page = 0
@@ -631,10 +674,10 @@ def render_poster_btn(key, poster_url, title, year, vote, iw=False, iv=False):
     """
     if poster_url:
         bg_image   = f'url("{poster_url}")'
-        bg_size    = 'cover'
-        bg_pos     = 'center top'
+        bg_size    = 'contain'
+        bg_pos     = 'center center'
         bg_repeat  = 'no-repeat'
-        bg_color   = 'transparent'
+        bg_color   = '#0d0d0d'
     else:
         bg_image   = 'none'
         bg_size    = 'auto'
@@ -707,6 +750,123 @@ def render_grid(rows, api_key, show_score=False, prefix=""):
                     show_movie_detail(mv_dict, api_key)
 
 
+
+# ── Fragment renderers ────────────────────────────────────────────────────────
+# @st.fragment limits reruns to just these sections, so Remove/rate actions
+# don't scroll the page back to the top.
+
+@st.fragment
+def _wishlist_cards(api_key):
+    if not st.session_state.wishlist:
+        st.markdown("""
+        <div class="empty">
+            <div class="empty-icon">🔖</div>
+            <div class="empty-text">Your wishlist is empty</div>
+            <div class="empty-sub">Search for a movie and click 🔖 Wishlist, or import a CSV above.</div>
+        </div>""", unsafe_allow_html=True)
+        return
+    st.markdown(f"""
+    <div class="sec-hdr" style="margin-top:1rem">
+        <span class="sec-hdr-title">My Wishlist</span>
+        <div class="sec-hdr-line"></div>
+        <span class="sec-hdr-count">{len(st.session_state.wishlist)} items</span>
+    </div>""", unsafe_allow_html=True)
+    wish_items = st.session_state.wishlist
+    chunks = [(i, wish_items[i:i+5]) for i in range(0, len(wish_items), 5)]
+    for chunk_start, chunk in chunks:
+        cols = st.columns(5)
+        for col_idx, (col, item) in enumerate(zip(cols, chunk)):
+            with col:
+                global_idx = chunk_start + col_idx
+                poster, tmdb_id, rating, mtype = get_media_info(item["title"], api_key, item.get("genres", "")) if api_key else (None, None, None, "movie")
+                year_m = re.search(r"\((\d{4})\)", item["title"])
+                year = year_m.group(1) if year_m else ""
+                if render_poster_btn(f"wish_{global_idx}", poster, clean_title(item["title"]),
+                                     year, rating, iw=True):
+                    if mtype == "tv":
+                        show_tv_detail({"id": tmdb_id, "name": item["title"], "poster_path": None}, api_key)
+                    else:
+                        show_movie_detail({"id": tmdb_id, "title": item["title"], "poster_path": None}, api_key)
+                if st.button("✕ Remove", key=f"wrm_{global_idx}", use_container_width=True):
+                    st.session_state.wishlist = [w for w in st.session_state.wishlist
+                                                 if w["title"] != item["title"]]
+                    st.rerun(scope="fragment")
+
+
+@st.fragment
+def _watched_items(api_key):
+    st.markdown(f"""
+    <div class="sec-hdr" style="margin-top:1rem">
+        <span class="sec-hdr-title">Watched Movies</span>
+        <div class="sec-hdr-line"></div>
+        <span class="sec-hdr-count">{len(st.session_state.watched)} movies</span>
+    </div>""", unsafe_allow_html=True)
+
+    for sw_idx, (title, personal_rating) in enumerate(list(st.session_state.watched.items())):
+        poster, tmdb_id, tmdb_rating, mtype = get_media_info(title, api_key) if api_key else (None, None, None, "movie")
+        img_html   = f'<img class="list-thumb" src="{poster}">' if poster else '<div class="list-thumb-ph">🎬</div>'
+        genres_row = movies[movies["title"] == title]["genres"].iloc[0] if title in movies["title"].values else ""
+        genre_str  = " · ".join(g for g in genres_row.split("|")[:3] if g and g != "(no genres listed)")
+        stars      = "★" * personal_rating + "☆" * (5 - personal_rating) if personal_rating else "☆☆☆☆☆"
+        tmdb_html  = f'<span class="tmdb-badge">★ {tmdb_rating:.1f}</span>' if tmdb_rating else ""
+        sw_key     = f"sw_{sw_idx}"
+
+        st.markdown(f"""<style>
+        .st-key-{sw_key} .stButton>button{{
+            background:transparent!important;border:none!important;
+            color:#f0f0f0!important;font-size:.85rem!important;font-weight:700!important;
+            padding:0!important;min-height:auto!important;text-align:left!important;
+            white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
+            line-height:1.4!important;box-shadow:none!important;letter-spacing:0!important;
+            text-transform:none!important;
+        }}
+        .st-key-{sw_key} .stButton>button:hover{{
+            color:#e50914!important;border:none!important;box-shadow:none!important;
+            transform:none!important;
+        }}
+        </style>""", unsafe_allow_html=True)
+
+        col_img, col_info, col_meta = st.columns([1, 6, 3])
+        with col_img:
+            st.markdown(img_html, unsafe_allow_html=True)
+        with col_info:
+            if st.button(clean_title(title), key=sw_key, use_container_width=True):
+                if mtype == "tv":
+                    show_tv_detail({"id": tmdb_id, "name": title, "poster_path": None}, api_key)
+                else:
+                    show_movie_detail({"id": tmdb_id, "title": title, "poster_path": None}, api_key)
+            st.markdown(f'<div class="list-genres" style="margin-top:2px">{genre_str}</div>', unsafe_allow_html=True)
+        with col_meta:
+            st.markdown(f'<div style="padding-top:.35rem"><span class="star-display">{stars}</span>{tmdb_html}</div>', unsafe_allow_html=True)
+
+        ca, cb, _ = st.columns([1, 1, 5])
+        with ca:
+            new_r = st.select_slider("Rating", [0,1,2,3,4,5], value=personal_rating,
+                                      format_func=lambda x: "★"*x or "—",
+                                      key=f"rate_{title}", label_visibility="collapsed")
+            if new_r != personal_rating:
+                st.session_state.watched[title] = new_r
+                st.rerun(scope="fragment")
+        with cb:
+            if st.button("✕ Remove", key=f"sr_{title}"):
+                del st.session_state.watched[title]
+                st.rerun(scope="fragment")
+        st.markdown("<hr style='border:none;border-top:1px solid #141414;margin:.4rem 0'>", unsafe_allow_html=True)
+
+    # Recommendations based on top-rated watched movies
+    top_rated = [t for t, r in sorted(st.session_state.watched.items(), key=lambda x: -x[1]) if r >= 4]
+    if top_rated:
+        st.markdown("""
+        <div class="sec-hdr" style="margin-top:2rem">
+            <span class="sec-hdr-title">Recommended Based on Your Top-Rated Films</span>
+            <div class="sec-hdr-line"></div>
+        </div>""", unsafe_allow_html=True)
+        seed = top_rated[0]
+        with st.spinner("Computing..."):
+            recs_from_seen = recommend(seed, N_RECS)
+        if not recs_from_seen.empty:
+            render_grid(recs_from_seen, api_key, show_score=True, prefix="seen")
+
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("""
@@ -759,8 +919,8 @@ st.markdown("""
 tab_disc, tab_tv, tab_wish, tab_seen = st.tabs([
     "🎬 Movies",
     "📺 TV Shows",
-    f"🔖 Wishlist ({len(st.session_state.wishlist)})",
-    f"✓ Watched ({len(st.session_state.watched)})",
+    "🔖 Wishlist",
+    "✓ Watched",
 ])
 
 # ══ TAB 1 — Movies ═══════════════════════════════════════════════════════════
@@ -983,38 +1143,7 @@ with tab_wish:
             except Exception as e:
                 st.error(f"Could not read CSV: {e}")
 
-    if not st.session_state.wishlist:
-        st.markdown("""
-        <div class="empty">
-            <div class="empty-icon">🔖</div>
-            <div class="empty-text">Your wishlist is empty</div>
-            <div class="empty-sub">Search for a movie and click 🔖 Wishlist, or import a CSV above.</div>
-        </div>""", unsafe_allow_html=True)
-    else:
-        st.markdown(f"""
-        <div class="sec-hdr" style="margin-top:1rem">
-            <span class="sec-hdr-title">My Wishlist</span>
-            <div class="sec-hdr-line"></div>
-            <span class="sec-hdr-count">{len(st.session_state.wishlist)} movies</span>
-        </div>""", unsafe_allow_html=True)
-
-        wish_items = st.session_state.wishlist
-        chunks = [(i, wish_items[i:i+5]) for i in range(0, len(wish_items), 5)]
-        for chunk_start, chunk in chunks:
-            cols = st.columns(5)
-            for col_idx, (col, item) in enumerate(zip(cols, chunk)):
-                with col:
-                    global_idx = chunk_start + col_idx
-                    poster, tmdb_id, rating = get_movie_info(item["title"], tmdb_api_key) if tmdb_api_key else (None, None, None)
-                    year_m = re.search(r"\((\d{4})\)", item["title"])
-                    year = year_m.group(1) if year_m else ""
-                    mv = {"id": tmdb_id, "title": item["title"], "poster_path": None}
-                    if render_poster_btn(f"wish_{global_idx}", poster, clean_title(item["title"]),
-                                         year, rating, iw=True):
-                        show_movie_detail(mv, tmdb_api_key)
-                    if st.button("✕ Remove", key=f"wrm_{global_idx}", use_container_width=True):
-                        st.session_state.wishlist = [w for w in st.session_state.wishlist if w["title"] != item["title"]]
-                        st.rerun()
+    _wishlist_cards(tmdb_api_key)
 
 # ══ TAB 5 — Watched ══════════════════════════════════════════════════════════
 with tab_seen:
@@ -1107,53 +1236,4 @@ with tab_seen:
                 except Exception as e:
                     st.error(f"Could not read CSV: {e}")
 
-        st.markdown(f"""
-        <div class="sec-hdr" style="margin-top:1rem">
-            <span class="sec-hdr-title">Watched Movies</span>
-            <div class="sec-hdr-line"></div>
-            <span class="sec-hdr-count">{len(st.session_state.watched)} movies</span>
-        </div>""", unsafe_allow_html=True)
-
-        for title, personal_rating in list(st.session_state.watched.items()):
-            poster, tmdb_id, tmdb_rating = get_movie_info(title, tmdb_api_key) if tmdb_api_key else (None, None, None)
-            img = f'<img class="list-thumb" src="{poster}">' if poster else '<div class="list-thumb-ph">🎬</div>'
-            genres_row = movies[movies["title"] == title]["genres"].iloc[0] if title in movies["title"].values else ""
-            genre_str  = " · ".join(g for g in genres_row.split("|")[:3] if g and g != "(no genres listed)")
-            stars      = "★" * personal_rating + "☆" * (5 - personal_rating) if personal_rating else "☆☆☆☆☆"
-            tmdb_html  = f'<span class="tmdb-badge">★ {tmdb_rating:.1f}</span>' if tmdb_rating else ""
-            st.markdown(f"""
-            <div class="list-row">
-                {img}
-                <div class="list-info">
-                    <div class="list-title">{clean_title(title)}</div>
-                    <div class="list-genres">{genre_str}</div>
-                </div>
-                <div class="list-meta"><span class="star-display">{stars}</span>{tmdb_html}</div>
-            </div>""", unsafe_allow_html=True)
-
-            ca, cb, _ = st.columns([1, 1, 5])
-            with ca:
-                new_r = st.select_slider("Rating", [0,1,2,3,4,5], value=personal_rating,
-                                          format_func=lambda x: "★"*x or "—",
-                                          key=f"rate_{title}", label_visibility="collapsed")
-                if new_r != personal_rating:
-                    st.session_state.watched[title] = new_r
-                    st.rerun()
-            with cb:
-                if st.button("✕ Remove", key=f"sr_{title}"):
-                    del st.session_state.watched[title]
-                    st.rerun()
-
-        # Recommendations based on top-rated watched movies
-        top_rated = [t for t, r in sorted(st.session_state.watched.items(), key=lambda x: -x[1]) if r >= 4]
-        if top_rated:
-            st.markdown("""
-            <div class="sec-hdr" style="margin-top:2rem">
-                <span class="sec-hdr-title">Recommended Based on Your Top-Rated Films</span>
-                <div class="sec-hdr-line"></div>
-            </div>""", unsafe_allow_html=True)
-            seed = top_rated[0]
-            with st.spinner("Computing..."):
-                recs_from_seen = recommend(seed, N_RECS)
-            if not recs_from_seen.empty:
-                render_grid(recs_from_seen, tmdb_api_key, show_score=True, prefix="seen")
+        _watched_items(tmdb_api_key)
