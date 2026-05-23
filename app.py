@@ -214,7 +214,7 @@ N_RECS = 20
 for _k, _v in [("wishlist", []), ("watched", {}),
                ("_mv_results", []), ("_mv_query", ""), ("_mv_similar", []), ("_mv_seed", None), ("_mv_sim_page", 0),
                ("_tv_results", []), ("_tv_query", ""), ("_tv_similar", []), ("_tv_seed", None), ("_tv_sim_page", 0),
-               ("_wish_import", False), ("_seen_import", False)]:
+               ("_wish_import", False), ("_seen_import", False), ("_goto_tab", None)]:
     if _k not in st.session_state:
         st.session_state[_k] = _v
 
@@ -530,6 +530,7 @@ def show_movie_detail(mv, api_key):
             st.session_state._mv_seed    = mv
             st.session_state._mv_similar = get_similar_movies(mv["id"], api_key)
             st.session_state._mv_sim_page = 0
+            st.session_state._goto_tab   = "movies"
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown("<hr style='border:none;border-top:1px solid #1a1a1a;margin:.6rem 0 1rem'>", unsafe_allow_html=True)
@@ -613,6 +614,7 @@ def show_tv_detail(show, api_key):
             st.session_state._tv_seed    = show
             st.session_state._tv_similar = get_similar_tv(show["id"], api_key)
             st.session_state._tv_sim_page = 0
+            st.session_state._goto_tab   = "tv"
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown("<hr style='border:none;border-top:1px solid #1a1a1a;margin:.6rem 0 1rem'>", unsafe_allow_html=True)
@@ -958,12 +960,21 @@ with tab_disc:
             page    = st.session_state._mv_sim_page
             total_p = max(1, (len(similar) + PAGE - 1) // PAGE)
             page    = min(page, total_p - 1)
-            st.markdown(f"""
-            <div class="sec-hdr" style="margin-top:1.5rem">
-                <span class="sec-hdr-title">Similar to · <em>{seed['title']}</em></span>
-                <div class="sec-hdr-line"></div>
-                <span class="sec-hdr-count">{len(similar)} movies</span>
-            </div>""", unsafe_allow_html=True)
+            _hcol, _xcol = st.columns([10, 1])
+            with _hcol:
+                st.markdown(f"""
+                <div class="sec-hdr" style="margin-top:1.5rem">
+                    <span class="sec-hdr-title">Similar to · <em>{seed['title']}</em></span>
+                    <div class="sec-hdr-line"></div>
+                    <span class="sec-hdr-count">{len(similar)} movies</span>
+                </div>""", unsafe_allow_html=True)
+            with _xcol:
+                st.markdown("<div style='margin-top:1.5rem'>", unsafe_allow_html=True)
+                if st.button("✕", key="mv_sim_close", help="Close similar section"):
+                    st.session_state._mv_similar = []
+                    st.session_state._mv_seed = None
+                    st.session_state._mv_sim_page = 0
+                    st.rerun()
             page_items = similar[page*PAGE:(page+1)*PAGE]
             sim_chunks = [page_items[i:i+5] for i in range(0, len(page_items), 5)]
             for chunk in sim_chunks:
@@ -1045,12 +1056,21 @@ with tab_tv:
             similar = st.session_state._tv_similar
             PAGE    = 10
             page    = min(st.session_state._tv_sim_page, max(0, (len(similar)-1)//PAGE))
-            st.markdown(f"""
-            <div class="sec-hdr" style="margin-top:1.5rem">
-                <span class="sec-hdr-title">Similar to · <em>{seed['name']}</em></span>
-                <div class="sec-hdr-line"></div>
-                <span class="sec-hdr-count">{len(similar)} shows</span>
-            </div>""", unsafe_allow_html=True)
+            _hcol, _xcol = st.columns([10, 1])
+            with _hcol:
+                st.markdown(f"""
+                <div class="sec-hdr" style="margin-top:1.5rem">
+                    <span class="sec-hdr-title">Similar to · <em>{seed['name']}</em></span>
+                    <div class="sec-hdr-line"></div>
+                    <span class="sec-hdr-count">{len(similar)} shows</span>
+                </div>""", unsafe_allow_html=True)
+            with _xcol:
+                st.markdown("<div style='margin-top:1.5rem'>", unsafe_allow_html=True)
+                if st.button("✕", key="tv_sim_close", help="Close similar section"):
+                    st.session_state._tv_similar = []
+                    st.session_state._tv_seed = None
+                    st.session_state._tv_sim_page = 0
+                    st.rerun()
             page_items = similar[page*PAGE:(page+1)*PAGE]
             sim_chunks = [page_items[i:i+5] for i in range(0, len(page_items), 5)]
             for chunk in sim_chunks:
@@ -1099,21 +1119,30 @@ with tab_tv:
 
 # ══ TAB 3 — Wishlist ═════════════════════════════════════════════════════════
 with tab_wish:
-    # ── Toolbar (always visible) ─────────────────────────────────────────────
-    ca, cb, cc, cd, _ = st.columns([1.5, 1.5, 1.5, 1, 3])
-    with ca:
-        df_wish = pd.DataFrame(st.session_state.wishlist) if st.session_state.wishlist else pd.DataFrame(columns=["title","genres"])
-        st.download_button("⬇ Export CSV", df_wish.to_csv(index=False),
-                           "nextwatch_wishlist.csv", "text/csv",
-                           use_container_width=True, disabled=not st.session_state.wishlist)
-    with cb:
-        if st.button("⬆ Import CSV", key="wish_import_btn", use_container_width=True):
-            st.session_state._wish_import = not st.session_state._wish_import
-    with cc:
-        if st.button("🗑 Clear", key="wish_clear", use_container_width=True,
-                     disabled=not st.session_state.wishlist):
-            st.session_state.wishlist = []
-            st.rerun()
+    # ── Toolbar ──────────────────────────────────────────────────────────────
+    if not st.session_state.wishlist:
+        ca0, cb0, _ = st.columns([1.5, 1.5, 5])
+        with ca0:
+            st.download_button("⬇ Export CSV", pd.DataFrame(columns=["title","genres"]).to_csv(index=False),
+                               "nextwatch_wishlist.csv", "text/csv",
+                               use_container_width=True, disabled=True)
+        with cb0:
+            if st.button("⬆ Import CSV", key="wish_import_btn_empty", use_container_width=True):
+                st.session_state._wish_import = not st.session_state._wish_import
+    else:
+        ca, cb, cc, _ = st.columns([1.5, 1.5, 1.5, 3])
+        with ca:
+            df_wish = pd.DataFrame(st.session_state.wishlist)
+            st.download_button("⬇ Export CSV", df_wish.to_csv(index=False),
+                               "nextwatch_wishlist.csv", "text/csv",
+                               use_container_width=True)
+        with cb:
+            if st.button("⬆ Import CSV", key="wish_import_btn", use_container_width=True):
+                st.session_state._wish_import = not st.session_state._wish_import
+        with cc:
+            if st.button("🗑 Clear all", key="wish_clear", use_container_width=True):
+                st.session_state.wishlist = []
+                st.rerun()
 
     if st.session_state._wish_import:
         uploaded = st.file_uploader(
@@ -1237,3 +1266,24 @@ with tab_seen:
                     st.error(f"Could not read CSV: {e}")
 
         _watched_items(tmdb_api_key)
+
+# ── Auto-switch tab after Find Similar ───────────────────────────────────────
+if st.session_state._goto_tab:
+    import streamlit.components.v1 as _cmp
+    _emoji = "🎬" if st.session_state._goto_tab == "movies" else "📺"
+    _cmp.html(f"""<script>
+    (function() {{
+        var _switch = function() {{
+            var tabs = window.parent.document.querySelectorAll('[data-baseweb="tab"]');
+            for (var i = 0; i < tabs.length; i++) {{
+                if (tabs[i].textContent.indexOf('{_emoji}') !== -1) {{
+                    tabs[i].click();
+                    return;
+                }}
+            }}
+        }};
+        // Small delay to let Streamlit finish rendering the tab bar
+        window.parent.setTimeout(_switch, 120);
+    }})();
+    </script>""", height=0)
+    st.session_state._goto_tab = None
