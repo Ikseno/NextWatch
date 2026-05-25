@@ -502,8 +502,13 @@ def recommend(title, n=10):
 @st.dialog("Movie Details", width="large")
 def show_movie_detail(mv, api_key):
     title = mv.get("title", "")
-    iw = any(w["title"] == title for w in st.session_state.wishlist)
-    iv = title in st.session_state.watched
+    # Append (year) so the stored key matches movies.csv format e.g. "Heat (1995)".
+    # mv["release_date"] is present for TMDB API results; skip if year already in title.
+    _year = (mv.get("release_date") or "")[:4]
+    title_stored = f"{title} ({_year})" if _year and f"({_year})" not in title else title
+
+    iw = any(w["title"] == title_stored for w in st.session_state.wishlist)
+    iv = title_stored in st.session_state.watched
 
     # ── Beautiful action buttons at TOP ────────────────────────────────────
     st.markdown('<div class="dlg-actions">', unsafe_allow_html=True)
@@ -513,16 +518,16 @@ def show_movie_detail(mv, api_key):
         if st.button(wish_lbl, key="dlg_mv_wish", use_container_width=True,
                      type="secondary"):
             if not iw:
-                st.session_state.wishlist.append({"title": title, "genres": "Movie"})
+                st.session_state.wishlist.append({"title": title_stored, "genres": "Movie"})
             else:
-                st.session_state.wishlist = [w for w in st.session_state.wishlist if w["title"] != title]
+                st.session_state.wishlist = [w for w in st.session_state.wishlist if w["title"] != title_stored]
             st.rerun()
     with bb:
         seen_lbl = "✓ Watched" if iv else "👁 Mark Watched"
         if st.button(seen_lbl, key="dlg_mv_seen", use_container_width=True,
                      type="secondary"):
             if not iv:
-                st.session_state.watched[title] = 0
+                st.session_state.watched[title_stored] = 0
             st.rerun()
     with bc:
         if st.button("🎭 Find Similar", key="dlg_mv_sim",
@@ -848,26 +853,12 @@ def _watched_items(api_key):
                                       key=f"rate_{title}", label_visibility="collapsed")
             if new_r != personal_rating:
                 st.session_state.watched[title] = new_r
-                st.rerun(scope="fragment")
+                st.rerun()  # full rerun so For You tab picks up new rating
         with cb:
             if st.button("✕ Remove", key=f"sr_{title}"):
                 del st.session_state.watched[title]
                 st.rerun(scope="fragment")
         st.markdown("<hr style='border:none;border-top:1px solid #141414;margin:.4rem 0'>", unsafe_allow_html=True)
-
-    # Recommendations based on top-rated watched movies
-    top_rated = [t for t, r in sorted(st.session_state.watched.items(), key=lambda x: -x[1]) if r >= 4]
-    if top_rated:
-        st.markdown("""
-        <div class="sec-hdr" style="margin-top:2rem">
-            <span class="sec-hdr-title">Recommended Based on Your Top-Rated Films</span>
-            <div class="sec-hdr-line"></div>
-        </div>""", unsafe_allow_html=True)
-        seed = top_rated[0]
-        with st.spinner("Computing..."):
-            recs_from_seen = recommend(seed, N_RECS)
-        if not recs_from_seen.empty:
-            render_grid(recs_from_seen, api_key, show_score=True, prefix="seen")
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -918,11 +909,12 @@ st.markdown("""
 </div>""", unsafe_allow_html=True)
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
-tab_disc, tab_tv, tab_wish, tab_seen = st.tabs([
+tab_disc, tab_tv, tab_wish, tab_seen, tab_recs = st.tabs([
     "🎬 Movies",
     "📺 TV Shows",
     "🔖 Wishlist",
     "✓ Watched",
+    "⭐ For You",
 ])
 
 # ══ TAB 1 — Movies ═══════════════════════════════════════════════════════════
@@ -1265,7 +1257,59 @@ with tab_seen:
                 except Exception as e:
                     st.error(f"Could not read CSV: {e}")
 
+        # ── Recommendation invite note ────────────────────────────────────────
+        top_for_note = [t for t, r in st.session_state.watched.items() if r >= 4]
+        if top_for_note:
+            st.markdown("""
+            <div style="background:rgba(229,9,20,.07);border:1px solid rgba(229,9,20,.2);
+                border-radius:10px;padding:.7rem 1.1rem;margin:.8rem 0 .4rem;
+                display:flex;align-items:center;gap:.7rem;">
+                <span style="font-size:1.15rem">⭐</span>
+                <span style="font-size:.82rem;color:#ccc;">
+                    You have high-rated films — check the
+                    <strong style="color:#e50914;">For You</strong>
+                    tab for personalised recommendations!
+                </span>
+            </div>""", unsafe_allow_html=True)
         _watched_items(tmdb_api_key)
+
+# ══ TAB 5 — For You ══════════════════════════════════════════════════════════
+with tab_recs:
+    if not st.session_state.watched:
+        st.markdown("""
+        <div class="empty">
+            <div class="empty-icon">⭐</div>
+            <div class="empty-text">No recommendations yet</div>
+            <div class="empty-sub">Rate some movies ★★★★ or higher in the Watched tab to unlock personalised picks.</div>
+        </div>""", unsafe_allow_html=True)
+    else:
+        top_rated_recs = [t for t, r in sorted(st.session_state.watched.items(), key=lambda x: -x[1]) if r >= 4]
+        if not top_rated_recs:
+            st.markdown("""
+            <div class="empty">
+                <div class="empty-icon">⭐</div>
+                <div class="empty-text">Rate more movies to get recommendations</div>
+                <div class="empty-sub">Give at least one movie ★★★★ or higher in the Watched tab.</div>
+            </div>""", unsafe_allow_html=True)
+        else:
+            seed_title = top_rated_recs[0]
+            st.markdown(f"""
+            <div class="sec-hdr" style="margin-top:1rem">
+                <span class="sec-hdr-title">Recommended for You</span>
+                <div class="sec-hdr-line"></div>
+                <span class="sec-hdr-count">Based on · <em>{seed_title.split(" (")[0]}</em></span>
+            </div>""", unsafe_allow_html=True)
+            # Sub-seeds: show up to 3 top-rated titles that drove the recs
+            if len(top_rated_recs) > 1:
+                seed_labels = " · ".join(t.split(" (")[0] for t in top_rated_recs[:3])
+                st.markdown(f'<p style="font-size:.75rem;color:#444;margin:-.6rem 0 1rem">Your top-rated: {seed_labels}</p>', unsafe_allow_html=True)
+            try:
+                with st.spinner("Computing your recommendations..."):
+                    recs_for_you = recommend(seed_title, N_RECS)
+                if not recs_for_you.empty:
+                    render_grid(recs_for_you, tmdb_api_key, show_score=True, prefix="foryou")
+            except Exception:
+                st.info("Some titles in your watched list aren't in the local dataset yet — try rating a different film.")
 
 # ── Auto-switch tab after Find Similar ───────────────────────────────────────
 if st.session_state._goto_tab:
