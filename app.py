@@ -471,8 +471,22 @@ def get_watch_providers(tmdb_id, api_key, media_type="movie", country="FR"):
     except Exception:
         return [], None
 
+def normalize_for_csv(title):
+    """Convert TMDB-style 'The Truman Show (1998)' → 'Truman Show, The (1998)'
+    to match the movies.csv article-at-end convention."""
+    m = re.match(r'^(The|A|An) (.+?)(\s*\(\d{4}\))?\s*$', title, re.IGNORECASE)
+    if m:
+        article, rest, year_part = m.group(1), m.group(2).rstrip(), m.group(3) or ""
+        return f"{rest}, {article}{year_part}"
+    return title
+
+
 def recommend(title, n=10):
-    idx = int(indices[title])
+    # Try exact title first, then article-normalised form (e.g. "The X" → "X, The")
+    lookup = title if title in indices else normalize_for_csv(title)
+    if lookup not in indices:
+        raise KeyError(f"Title not in dataset: {title!r}")
+    idx = int(indices[lookup])
     movie_id = int(movies.iloc[idx]["movieId"])
 
     content_scores = np.array(content_sim[idx]).flatten()
