@@ -180,7 +180,8 @@ def load_data():
     tfidf = TfidfVectorizer(stop_words="english")
     tfidf_matrix = tfidf.fit_transform(movies["genres"])
     content_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
-    indices = pd.Series(movies.index, index=movies["title"]).drop_duplicates()
+    indices = pd.Series(movies.index, index=movies["title"])
+    indices = indices[~indices.index.duplicated(keep='first')]
 
     ratings = pd.read_csv("ratings.csv")
     n_ratings = len(ratings)
@@ -509,6 +510,53 @@ def recommend(title, n=10):
     res["score"]   = [float(hybrid[i]) for i in top]
     res["c_score"] = [float(content_scores[i]) for i in top]
     res["k_score"] = [float(collab_scores[i]) for i in top]
+    return res
+
+
+def recommend_multi(titles, n=10):
+    """Aggregate hybrid scores across multiple seed titles and return top-n recommendations."""
+    agg_content = np.zeros(len(movies))
+    agg_collab  = np.zeros(len(movies))
+    seed_idxs   = []
+
+    for title in titles:
+        lookup = title if title in indices else normalize_for_csv(title)
+        if lookup not in indices:
+            continue
+        idx = int(indices[lookup])
+        movie_id = int(movies.iloc[idx]["movieId"])
+        seed_idxs.append(idx)
+
+        cs = np.array(content_sim[idx]).flatten()
+        cf = np.zeros(len(movies))
+        if movie_id in mid_to_col:
+            c = mid_to_col[movie_id]
+            sims = cosine_similarity(item_matrix[c], item_matrix).flatten()
+            valid = col_map >= 0
+            cf[valid] = sims[col_map[valid]]
+
+        if cs.max() > 0: cs /= cs.max()
+        if cf.max() > 0: cf /= cf.max()
+
+        agg_content += cs
+        agg_collab  += cf
+
+    if not seed_idxs:
+        raise KeyError("None of the provided titles are in the dataset.")
+
+    k = len(seed_idxs)
+    agg_content /= k
+    agg_collab  /= k
+
+    hybrid = 0.6 * agg_content + 0.4 * agg_collab
+    for idx in seed_idxs:
+        hybrid[idx] = -1
+
+    top = np.argsort(hybrid)[::-1][:n]
+    res = movies[["title", "genres"]].iloc[top].copy()
+    res["score"]   = [float(hybrid[i]) for i in top]
+    res["c_score"] = [float(agg_content[i]) for i in top]
+    res["k_score"] = [float(agg_collab[i]) for i in top]
     return res
 
 
@@ -1306,24 +1354,22 @@ with tab_recs:
                 <div class="empty-sub">Give at least one movie ★★★★ or higher in the Watched tab.</div>
             </div>""", unsafe_allow_html=True)
         else:
-            seed_title = top_rated_recs[0]
+            seed_titles = top_rated_recs[:5]
+            seed_labels = " · ".join(t.split(" (")[0] for t in seed_titles)
             st.markdown(f"""
             <div class="sec-hdr" style="margin-top:1rem">
                 <span class="sec-hdr-title">Recommended for You</span>
                 <div class="sec-hdr-line"></div>
-                <span class="sec-hdr-count">Based on · <em>{seed_title.split(" (")[0]}</em></span>
+                <span class="sec-hdr-count">Based on {len(seed_titles)} film{"s" if len(seed_titles) > 1 else ""}</span>
             </div>""", unsafe_allow_html=True)
-            # Sub-seeds: show up to 3 top-rated titles that drove the recs
-            if len(top_rated_recs) > 1:
-                seed_labels = " · ".join(t.split(" (")[0] for t in top_rated_recs[:3])
-                st.markdown(f'<p style="font-size:.75rem;color:#444;margin:-.6rem 0 1rem">Your top-rated: {seed_labels}</p>', unsafe_allow_html=True)
+            st.markdown(f'<p style="font-size:.75rem;color:#444;margin:-.6rem 0 1rem">Your top-rated: {seed_labels}</p>', unsafe_allow_html=True)
             try:
                 with st.spinner("Computing your recommendations..."):
-                    recs_for_you = recommend(seed_title, N_RECS)
+                    recs_for_you = recommend_multi(seed_titles, N_RECS)
                 if not recs_for_you.empty:
                     render_grid(recs_for_you, tmdb_api_key, show_score=True, prefix="foryou")
             except Exception:
-                st.info("Some titles in your watched list aren't in the local dataset yet — try rating a different film.")
+                st.info("Some titles in your watched list aren't in the local dataset yet — try rating different films.")
 
 # ── Auto-switch tab after Find Similar ───────────────────────────────────────
 if st.session_state._goto_tab:
