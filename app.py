@@ -1356,21 +1356,38 @@ with tab_recs:
                 <div class="empty-sub">Give at least one movie ★★★★ or higher in the Watched tab.</div>
             </div>""", unsafe_allow_html=True)
         else:
-            seed_titles = top_rated_recs[:5]
-            seed_labels = " · ".join(t.split(" (")[0] for t in seed_titles)
-            _hcol, _rcol = st.columns([10, 1])
+            max_seeds = len(top_rated_recs)
+            # Clamp stored value in case user removed some top-rated films
+            if "recs_n_seeds" not in st.session_state or st.session_state.recs_n_seeds > max_seeds:
+                st.session_state.recs_n_seeds = min(max_seeds, 5)
+
+            _hcol, _scol, _rcol = st.columns([7, 2, 1])
             with _hcol:
-                st.markdown(f"""
+                st.markdown("""
                 <div class="sec-hdr" style="margin-top:1rem">
                     <span class="sec-hdr-title">Recommended for You</span>
                     <div class="sec-hdr-line"></div>
-                    <span class="sec-hdr-count">Based on {len(seed_titles)} film{"s" if len(seed_titles) > 1 else ""}</span>
                 </div>""", unsafe_allow_html=True)
+            with _scol:
+                n_seeds = st.selectbox(
+                    "seeds",
+                    options=list(range(1, max_seeds + 1)),
+                    index=st.session_state.recs_n_seeds - 1,
+                    format_func=lambda n: f"Top {n} film{'s' if n > 1 else ''}",
+                    key="recs_seed_select",
+                    label_visibility="collapsed",
+                )
+                st.session_state.recs_n_seeds = n_seeds
             with _rcol:
-                st.markdown("<div style='margin-top:1rem'>", unsafe_allow_html=True)
-                if st.button("🔄", key="recs_refresh", help="Refresh recommendations"):
+                st.markdown("<div style='margin-top:.3rem'>", unsafe_allow_html=True)
+                if st.button("\U0001f504", key="recs_refresh", help="Refresh recommendations"):
                     st.rerun()
-            st.markdown(f'<p style="font-size:.75rem;color:#444;margin:-.6rem 0 1rem">Your top-rated: {seed_labels}</p>', unsafe_allow_html=True)
+
+            seed_titles = top_rated_recs[:n_seeds]
+            seed_labels = " \u00b7 ".join(t.split(" (")[0] for t in seed_titles)
+            st.markdown(
+                f'<div style="background:#111;border:1px solid #1e1e1e;border-radius:8px;padding:.6rem 1rem;margin:-.2rem 0 1.2rem;font-size:.8rem;color:#666;">Recommendations are based on your <strong style="color:#f0f0f0;">top {n_seeds} film{chr(115) if n_seeds > 1 else chr(32)}</strong>: {seed_labels}</div>',
+                unsafe_allow_html=True)
             try:
                 with st.spinner("Computing your recommendations..."):
                     recs_for_you = recommend_multi(seed_titles, N_RECS)

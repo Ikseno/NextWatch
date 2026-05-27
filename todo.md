@@ -26,4 +26,4 @@
 
 - fix date display in for you tab --> DONE
 
-- add option to choose how many movies to base recommendation in the for you page 
+- add option to choose how many movies to base recommendation in the for you page --> DONE
