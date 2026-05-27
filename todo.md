@@ -21,3 +21,9 @@
 - new movies / not popular movies will not be present in csv files so create if present condition so that it doesn't crash the program --> TESTING IN PROGRESS
 
 - use multiple movies (let's say top 5 movies) for recommendation system --> DONE
+
+- add refresh button in the for you tab --> DONE
+
+- fix date display in for you tab --> DONE
+
+- add option to choose how many movies to base recommendation in the for you page 

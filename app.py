@@ -812,9 +812,11 @@ def render_grid(rows, api_key, show_score=False, prefix=""):
                 iv = row["title"] in in_watched
                 score = row.get("score") if show_score else None
                 vote_for_display = rating
+                year_m = re.search(r"\((\d{4})\)", row["title"])
+                year = year_m.group(1) if year_m else ""
                 key = f"{prefix}_{row_idx}"
                 if render_poster_btn(key, poster, clean_title(row["title"]),
-                                     "", vote_for_display, iw, iv):
+                                     year, vote_for_display, iw, iv):
                     mv_dict = {"id": tmdb_id, "title": row["title"], "poster_path": None}
                     show_movie_detail(mv_dict, api_key)
 
@@ -1228,7 +1230,7 @@ with tab_wish:
 
     _wishlist_cards(tmdb_api_key)
 
-# ══ TAB 5 — Watched ══════════════════════════════════════════════════════════
+# ══ TAB 4 — Watched ══════════════════════════════════════════════════════════
 with tab_seen:
     # ── Toolbar always visible ───────────────────────────────────────────────
     if not st.session_state.watched:
@@ -1356,12 +1358,18 @@ with tab_recs:
         else:
             seed_titles = top_rated_recs[:5]
             seed_labels = " · ".join(t.split(" (")[0] for t in seed_titles)
-            st.markdown(f"""
-            <div class="sec-hdr" style="margin-top:1rem">
-                <span class="sec-hdr-title">Recommended for You</span>
-                <div class="sec-hdr-line"></div>
-                <span class="sec-hdr-count">Based on {len(seed_titles)} film{"s" if len(seed_titles) > 1 else ""}</span>
-            </div>""", unsafe_allow_html=True)
+            _hcol, _rcol = st.columns([10, 1])
+            with _hcol:
+                st.markdown(f"""
+                <div class="sec-hdr" style="margin-top:1rem">
+                    <span class="sec-hdr-title">Recommended for You</span>
+                    <div class="sec-hdr-line"></div>
+                    <span class="sec-hdr-count">Based on {len(seed_titles)} film{"s" if len(seed_titles) > 1 else ""}</span>
+                </div>""", unsafe_allow_html=True)
+            with _rcol:
+                st.markdown("<div style='margin-top:1rem'>", unsafe_allow_html=True)
+                if st.button("🔄", key="recs_refresh", help="Refresh recommendations"):
+                    st.rerun()
             st.markdown(f'<p style="font-size:.75rem;color:#444;margin:-.6rem 0 1rem">Your top-rated: {seed_labels}</p>', unsafe_allow_html=True)
             try:
                 with st.spinner("Computing your recommendations..."):
