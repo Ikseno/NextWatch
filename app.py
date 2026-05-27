@@ -215,7 +215,8 @@ N_RECS = 20
 for _k, _v in [("wishlist", []), ("watched", {}),
                ("_mv_results", []), ("_mv_query", ""), ("_mv_similar", []), ("_mv_seed", None), ("_mv_sim_page", 0),
                ("_tv_results", []), ("_tv_query", ""), ("_tv_similar", []), ("_tv_seed", None), ("_tv_sim_page", 0),
-               ("_wish_import", False), ("_seen_import", False), ("_goto_tab", None)]:
+               ("_wish_import", False), ("_seen_import", False), ("_goto_tab", None),
+               ("watched_types", {})]:
     if _k not in st.session_state:
         st.session_state[_k] = _v
 
@@ -590,6 +591,7 @@ def show_movie_detail(mv, api_key):
                      type="secondary"):
             if not iv:
                 st.session_state.watched[title_stored] = 0
+                st.session_state.watched_types[title_stored] = "movie"
             st.rerun()
     with bc:
         if st.button("🎭 Find Similar", key="dlg_mv_sim",
@@ -653,8 +655,13 @@ def show_movie_detail(mv, api_key):
 @st.dialog("Series Details", width="large")
 def show_tv_detail(show, api_key):
     name = show.get("name", "")
-    iw = any(w["title"] == name for w in st.session_state.wishlist)
-    iv = name in st.session_state.watched
+    # Append (year) from first_air_date so the stored key includes the year,
+    # matching the year tag shown on wishlist/watched cards.
+    _year = (show.get("first_air_date") or "")[:4]
+    name_stored = f"{name} ({_year})" if _year and f"({_year})" not in name else name
+
+    iw = any(w["title"] == name_stored for w in st.session_state.wishlist)
+    iv = name_stored in st.session_state.watched
 
     # ── Beautiful action buttons at TOP ────────────────────────────────────
     st.markdown('<div class="dlg-actions">', unsafe_allow_html=True)
@@ -664,16 +671,17 @@ def show_tv_detail(show, api_key):
         if st.button(wish_lbl, key="dlg_tv_wish", use_container_width=True,
                      type="secondary"):
             if not iw:
-                st.session_state.wishlist.append({"title": name, "genres": "TV Show"})
+                st.session_state.wishlist.append({"title": name_stored, "genres": "TV Show"})
             else:
-                st.session_state.wishlist = [w for w in st.session_state.wishlist if w["title"] != name]
+                st.session_state.wishlist = [w for w in st.session_state.wishlist if w["title"] != name_stored]
             st.rerun()
     with bb:
         seen_lbl = "✓ Watched" if iv else "👁 Mark Watched"
         if st.button(seen_lbl, key="dlg_tv_seen", use_container_width=True,
                      type="secondary"):
             if not iv:
-                st.session_state.watched[name] = 0
+                st.session_state.watched[name_stored] = 0
+                st.session_state.watched_types[name_stored] = "tv"
             st.rerun()
     with bc:
         if st.button("🎭 Find Similar", key="dlg_tv_sim",
@@ -866,21 +874,19 @@ def _wishlist_cards(api_key):
 
 @st.fragment
 def _watched_items(api_key):
-    st.markdown(f"""
-    <div class="sec-hdr" style="margin-top:1rem">
-        <span class="sec-hdr-title">Watched Movies</span>
-        <div class="sec-hdr-line"></div>
-        <span class="sec-hdr-count">{len(st.session_state.watched)} movies</span>
-    </div>""", unsafe_allow_html=True)
+    wt = st.session_state.get("watched_types", {})
+    all_items = list(st.session_state.watched.items())
+    movies_list = [(t, r) for t, r in all_items if wt.get(t, "movie") == "movie"]
+    tv_list     = [(t, r) for t, r in all_items if wt.get(t) == "tv"]
 
-    for sw_idx, (title, personal_rating) in enumerate(list(st.session_state.watched.items())):
-        poster, tmdb_id, tmdb_rating, mtype = get_media_info(title, api_key) if api_key else (None, None, None, "movie")
-        img_html   = f'<img class="list-thumb" src="{poster}">' if poster else '<div class="list-thumb-ph">🎬</div>'
+    def _render_row(title, personal_rating, sw_idx, genre_hint=""):
+        poster, tmdb_id, tmdb_rating, mtype = get_media_info(title, api_key, genre_hint) if api_key else (None, None, None, "movie")
+        img_html  = f'<img class="list-thumb" src="{poster}">' if poster else '<div class="list-thumb-ph">🎬</div>'
         genres_row = movies[movies["title"] == title]["genres"].iloc[0] if title in movies["title"].values else ""
         genre_str  = " · ".join(g for g in genres_row.split("|")[:3] if g and g != "(no genres listed)")
-        stars      = "★" * personal_rating + "☆" * (5 - personal_rating) if personal_rating else "☆☆☆☆☆"
-        tmdb_html  = f'<span class="tmdb-badge">★ {tmdb_rating:.1f}</span>' if tmdb_rating else ""
-        sw_key     = f"sw_{sw_idx}"
+        stars     = "★" * personal_rating + "☆" * (5 - personal_rating) if personal_rating else "☆☆☆☆☆"
+        tmdb_html = f'<span class="tmdb-badge">★ {tmdb_rating:.1f}</span>' if tmdb_rating else ""
+        sw_key    = f"sw_{sw_idx}"
 
         st.markdown(f"""<style>
         .st-key-{sw_key} .stButton>button{{
@@ -921,8 +927,38 @@ def _watched_items(api_key):
         with cb:
             if st.button("✕ Remove", key=f"sr_{title}"):
                 del st.session_state.watched[title]
+                st.session_state.watched_types.pop(title, None)
                 st.rerun(scope="fragment")
         st.markdown("<hr style='border:none;border-top:1px solid #141414;margin:.4rem 0'>", unsafe_allow_html=True)
+
+    # ── Movies section ────────────────────────────────────────────────────────
+    if movies_list:
+        st.markdown(f"""
+        <div class="sec-hdr" style="margin-top:1rem">
+            <span class="sec-hdr-title">🎬 Movies</span>
+            <div class="sec-hdr-line"></div>
+            <span class="sec-hdr-count">{len(movies_list)} watched</span>
+        </div>""", unsafe_allow_html=True)
+        for sw_idx, (title, rating) in enumerate(movies_list):
+            _render_row(title, rating, f"mv_{sw_idx}", genre_hint="")
+
+    # ── TV Shows section ──────────────────────────────────────────────────────
+    if tv_list:
+        st.markdown(f"""
+        <div class="sec-hdr" style="margin-top:2rem">
+            <span class="sec-hdr-title">📺 TV Shows</span>
+            <div class="sec-hdr-line"></div>
+            <span class="sec-hdr-count">{len(tv_list)} watched</span>
+        </div>""", unsafe_allow_html=True)
+        for sw_idx, (title, rating) in enumerate(tv_list):
+            _render_row(title, rating, f"tv_{sw_idx}", genre_hint="TV Show")
+
+    if not movies_list and not tv_list:
+        st.markdown("""
+        <div class="empty">
+            <div class="empty-icon">✓</div>
+            <div class="empty-text">Nothing watched yet</div>
+        </div>""", unsafe_allow_html=True)
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -1322,7 +1358,8 @@ with tab_seen:
                     st.error(f"Could not read CSV: {e}")
 
         # ── Recommendation invite note ────────────────────────────────────────
-        top_for_note = [t for t, r in st.session_state.watched.items() if r >= 4]
+        top_for_note = [t for t, r in st.session_state.watched.items()
+                            if r >= 4 and st.session_state.get("watched_types", {}).get(t, "movie") == "movie"]
         if top_for_note:
             st.markdown("""
             <div style="background:rgba(229,9,20,.07);border:1px solid rgba(229,9,20,.2);
@@ -1347,7 +1384,8 @@ with tab_recs:
             <div class="empty-sub">Rate some movies ★★★★ or higher in the Watched tab to unlock personalised picks.</div>
         </div>""", unsafe_allow_html=True)
     else:
-        top_rated_recs = [t for t, r in sorted(st.session_state.watched.items(), key=lambda x: -x[1]) if r >= 4]
+        top_rated_recs = [t for t, r in sorted(st.session_state.watched.items(), key=lambda x: -x[1])
+                              if r >= 4 and st.session_state.get("watched_types", {}).get(t, "movie") == "movie"]
         if not top_rated_recs:
             st.markdown("""
             <div class="empty">
