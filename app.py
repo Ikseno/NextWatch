@@ -20,7 +20,7 @@ st.markdown("""
 * { font-family:'Inter',sans-serif!important; box-sizing:border-box; }
 
 .stApp { background:#080808!important; color:#f0f0f0; }
-#MainMenu,footer,.stDeployButton,[data-testid="stToolbar"]{visibility:hidden!important;display:none!important;}
+#MainMenu, footer, .stDeployButton{visibility:hidden!important; display:none!important;}
 [data-testid="stAppViewContainer"]{background:#080808;}
 [data-testid="block-container"]{
     padding-top:0!important;
