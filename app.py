@@ -6,6 +6,7 @@ import re
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from scipy.sparse import csr_matrix
+from difflib import get_close_matches
 
 st.set_page_config(
     page_title="NextWatch", page_icon="🎬", layout="wide",
@@ -215,7 +216,7 @@ N_RECS = 20
 for _k, _v in [("wishlist", []), ("watched", {}),
                ("_mv_results", []), ("_mv_query", ""), ("_mv_similar", []), ("_mv_seed", None), ("_mv_sim_page", 0),
                ("_tv_results", []), ("_tv_query", ""), ("_tv_similar", []), ("_tv_seed", None), ("_tv_sim_page", 0),
-               ("_wish_import", False), ("_seen_import", False), ("_goto_tab", None),
+               ("_goto_tab", None),
                ("watched_types", {})]:
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -481,12 +482,31 @@ def normalize_for_csv(title):
         article, rest, year_part = m.group(1), m.group(2).rstrip(), m.group(3) or ""
         return f"{rest}, {article}{year_part}"
     return title
+    
+def find_best_movie_title(title):
+    candidates = movies["title"].tolist()
+    possible_titles = [
+        title,
+        normalize_for_csv(title),
+        clean_title(title),
+        normalize_for_csv(clean_title(title))
+    ]
+    for t in possible_titles:
+        if t in indices:
+            return t
+    matches = get_close_matches(title, candidates, n=1, cutoff=0.55)
+    if matches:
+        return matches[0]
+    matches = get_close_matches(normalize_for_csv(title), candidates, n=1, cutoff=0.55)
+    if matches:
+        return matches[0]
+    return None
 
 
 def recommend(title, n=10):
     # Try exact title first, then article-normalised form (e.g. "The X" → "X, The")
-    lookup = title if title in indices else normalize_for_csv(title)
-    if lookup not in indices:
+    lookup = find_best_movie_title(title)
+    if lookup is None:
         raise KeyError(f"Title not in dataset: {title!r}")
     idx = int(indices[lookup])
     movie_id = int(movies.iloc[idx]["movieId"])
@@ -521,8 +541,8 @@ def recommend_multi(titles, n=10):
     seed_idxs   = []
 
     for title in titles:
-        lookup = title if title in indices else normalize_for_csv(title)
-        if lookup not in indices:
+        lookup = find_best_movie_title(title)
+        if lookup is None:
             continue
         idx = int(indices[lookup])
         movie_id = int(movies.iloc[idx]["movieId"])
@@ -841,7 +861,7 @@ def _wishlist_cards(api_key):
         <div class="empty">
             <div class="empty-icon">🔖</div>
             <div class="empty-text">Your wishlist is empty</div>
-            <div class="empty-sub">Search for a movie and click 🔖 Wishlist, or import a CSV above.</div>
+            <div class="empty-sub">Search for a movie and click 🔖 Wishlist.</div>
         </div>""", unsafe_allow_html=True)
         return
     st.markdown(f"""
@@ -1211,155 +1231,34 @@ with tab_tv:
 
 # ══ TAB 3 — Wishlist ═════════════════════════════════════════════════════════
 with tab_wish:
-    # ── Toolbar ──────────────────────────────────────────────────────────────
-    if not st.session_state.wishlist:
-        ca0, cb0, _ = st.columns([1.5, 1.5, 5])
-        with ca0:
-            st.download_button("⬇ Export CSV", pd.DataFrame(columns=["title","genres"]).to_csv(index=False),
-                               "nextwatch_wishlist.csv", "text/csv",
-                               use_container_width=True, disabled=True)
-        with cb0:
-            if st.button("⬆ Import CSV", key="wish_import_btn_empty", use_container_width=True):
-                st.session_state._wish_import = not st.session_state._wish_import
-    else:
-        ca, cb, cc, _ = st.columns([1.5, 1.5, 1.5, 3])
-        with ca:
-            df_wish = pd.DataFrame(st.session_state.wishlist)
-            st.download_button("⬇ Export CSV", df_wish.to_csv(index=False),
-                               "nextwatch_wishlist.csv", "text/csv",
-                               use_container_width=True)
-        with cb:
-            if st.button("⬆ Import CSV", key="wish_import_btn", use_container_width=True):
-                st.session_state._wish_import = not st.session_state._wish_import
-        with cc:
-            if st.button("🗑 Clear all", key="wish_clear", use_container_width=True):
-                st.session_state.wishlist = []
-                st.rerun()
-
-    if st.session_state._wish_import:
-        uploaded = st.file_uploader(
-            "Upload a CSV with columns: **title**, **genres**  "
-            "(same format as the export)",
-            type=["csv"], key="wish_uploader"
-        )
-        if uploaded is not None:
-            import io
-            try:
-                df_in = pd.read_csv(io.BytesIO(uploaded.read()))
-                if "title" not in df_in.columns:
-                    st.error("CSV must have a 'title' column.")
-                else:
-                    existing = {w["title"] for w in st.session_state.wishlist}
-                    added = 0
-                    for _, row in df_in.iterrows():
-                        t = str(row["title"]).strip()
-                        g = str(row.get("genres", "Movie")).strip() if "genres" in df_in.columns else "Movie"
-                        if t and t not in existing:
-                            st.session_state.wishlist.append({"title": t, "genres": g})
-                            existing.add(t)
-                            added += 1
-                    st.success(f"Imported {added} new item(s).")
-                    st.session_state._wish_import = False
-                    st.rerun()
-            except Exception as e:
-                st.error(f"Could not read CSV: {e}")
+    if st.session_state.wishlist:
+        if st.button("🗑 Clear all", key="wish_clear", use_container_width=True):
+            st.session_state.wishlist = []
+            st.rerun()
 
     _wishlist_cards(tmdb_api_key)
 
 # ══ TAB 4 — Watched ══════════════════════════════════════════════════════════
 with tab_seen:
-    # ── Toolbar always visible ───────────────────────────────────────────────
     if not st.session_state.watched:
-        _empty_df = pd.DataFrame(columns=["title","personal_rating","genres"])
-        ca0, cb0, _ = st.columns([1.5, 1.5, 5])
-        with ca0:
-            st.download_button("⬇ Export CSV", _empty_df.to_csv(index=False),
-                               "nextwatch_watched.csv", "text/csv",
-                               use_container_width=True, disabled=True)
-        with cb0:
-            if st.button("⬆ Import CSV", key="seen_import_btn_empty", use_container_width=True):
-                st.session_state._seen_import = not st.session_state._seen_import
+        st.markdown("""
+        <div class="empty">
+            <div class="empty-icon">✓</div>
+            <div class="empty-text">No movies marked as watched</div>
+            <div class="empty-sub">Search for a movie and click "✓ Watched".</div>
+        </div>""", unsafe_allow_html=True)
 
-        if st.session_state._seen_import:
-            uploaded_s = st.file_uploader(
-                "Upload a CSV with columns: **title**, **personal_rating**",
-                type=["csv"], key="seen_uploader_empty"
-            )
-            if uploaded_s is not None:
-                import io
-                try:
-                    df_in = pd.read_csv(io.BytesIO(uploaded_s.read()))
-                    if "title" not in df_in.columns:
-                        st.error("CSV must have a 'title' column.")
-                    else:
-                        added = 0
-                        for _, row in df_in.iterrows():
-                            t = str(row["title"]).strip()
-                            r = int(row["personal_rating"]) if "personal_rating" in df_in.columns and pd.notna(row["personal_rating"]) else 0
-                            r = max(0, min(5, r))
-                            if t and t not in st.session_state.watched:
-                                st.session_state.watched[t] = r
-                                added += 1
-                        st.success(f"Imported {added} new item(s).")
-                        st.session_state._seen_import = False
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"Could not read CSV: {e}")
-        else:
-            st.markdown("""
-            <div class="empty">
-                <div class="empty-icon">✓</div>
-                <div class="empty-text">No movies marked as watched</div>
-                <div class="empty-sub">Click "✓ Watched" on any movie, or import a CSV above.</div>
-            </div>""", unsafe_allow_html=True)
     else:
-        df_seen = pd.DataFrame([
-            {"title": t, "personal_rating": r,
-             "genres": movies[movies["title"] == t]["genres"].iloc[0] if t in movies["title"].values else ""}
-            for t, r in st.session_state.watched.items()
-        ])
-        ca, cb, cc, _ = st.columns([1.5, 1.5, 1.5, 3])
-        with ca:
-            st.download_button("⬇ Export CSV", df_seen.to_csv(index=False),
-                               "nextwatch_watched.csv", "text/csv", use_container_width=True)
-        with cb:
-            if st.button("⬆ Import CSV", key="seen_import_btn", use_container_width=True):
-                st.session_state._seen_import = not st.session_state._seen_import
-        with cc:
-            if st.button("🗑 Clear all", key="seen_clear", use_container_width=True):
-                st.session_state.watched = {}
-                st.rerun()
+        if st.button("🗑 Clear all", key="seen_clear", use_container_width=True):
+            st.session_state.watched = {}
+            st.session_state.watched_types = {}
+            st.rerun()
 
-        if st.session_state._seen_import:
-            uploaded_s = st.file_uploader(
-                "Upload a CSV with columns: **title**, **personal_rating**  "
-                "(same format as the export)",
-                type=["csv"], key="seen_uploader"
-            )
-            if uploaded_s is not None:
-                import io
-                try:
-                    df_in = pd.read_csv(io.BytesIO(uploaded_s.read()))
-                    if "title" not in df_in.columns:
-                        st.error("CSV must have a 'title' column.")
-                    else:
-                        added = 0
-                        for _, row in df_in.iterrows():
-                            t = str(row["title"]).strip()
-                            r = int(row["personal_rating"]) if "personal_rating" in df_in.columns and pd.notna(row["personal_rating"]) else 0
-                            r = max(0, min(5, r))
-                            if t and t not in st.session_state.watched:
-                                st.session_state.watched[t] = r
-                                added += 1
-                        st.success(f"Imported {added} new item(s).")
-                        st.session_state._seen_import = False
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"Could not read CSV: {e}")
+        top_for_note = [
+            t for t, r in st.session_state.watched.items()
+            if r >= 4 and st.session_state.get("watched_types", {}).get(t, "movie") == "movie"
+        ]
 
-        # ── Recommendation invite note ────────────────────────────────────────
-        top_for_note = [t for t, r in st.session_state.watched.items()
-                            if r >= 4 and st.session_state.get("watched_types", {}).get(t, "movie") == "movie"]
         if top_for_note:
             st.markdown("""
             <div style="background:rgba(229,9,20,.07);border:1px solid rgba(229,9,20,.2);
@@ -1372,8 +1271,8 @@ with tab_seen:
                     tab for personalised recommendations!
                 </span>
             </div>""", unsafe_allow_html=True)
-        _watched_items(tmdb_api_key)
 
+        _watched_items(tmdb_api_key)
 # ══ TAB 5 — For You ══════════════════════════════════════════════════════════
 with tab_recs:
     if not st.session_state.watched:
