@@ -24,8 +24,7 @@ st.markdown("""
 [data-testid="stAppViewContainer"]{background:#080808;}
 [data-testid="block-container"]{
     padding-top:0!important;
-    padding-left:2rem!important;
-    padding-right:2rem!important;
+    margin-top:-50px!important;
 }
 header[data-testid="stHeader"]{
     display:none!important;
@@ -92,8 +91,8 @@ header[data-testid="stHeader"]{
 ::-webkit-scrollbar-thumb:hover{background:#e50914;}
 
 /* ── Hero ── */
-.hero{position:relative;border-bottom:1px solid #1a1a1a;padding:4.5rem 2rem 3rem;text-align:center;margin-bottom:1.5rem;overflow:hidden;}
-.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(229,9,20,.13) 0%,transparent 70%);pointer-events:none;}
+.hero{position:relative;border-bottom:1px solid #1a1a1a;padding:2rem 2rem 0.5rem;text-align:center;margin-bottom:0.5rem;overflow:hidden;}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(229,9,20,.08) 0%,transparent 70%);pointer-events:none;}
 .hero::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 60%,#080808 100%);pointer-events:none;}
 .hero-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(229,9,20,.1);border:1px solid rgba(229,9,20,.25);color:#e50914;padding:5px 16px;border-radius:20px;font-size:.7rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;margin-bottom:1.4rem;}
 .hero-title{font-size:clamp(4rem,10vw,7.5rem);font-weight:900;line-height:.95;margin:0 0 .7rem;letter-spacing:-.04em;background:linear-gradient(160deg,#fff 40%,#555 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
@@ -121,7 +120,7 @@ header[data-testid="stHeader"]{
 .genre-row{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:.42rem;}
 .gtag{background:#1a1a1a;color:#555;padding:2px 6px;border-radius:4px;font-size:.58rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;border:1px solid #222;}
 .sim-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:.67rem;font-weight:700;border:1px solid rgba(229,9,20,.25);background:rgba(229,9,20,.07);color:#ff4d4d;}
-.sim-dot{width:5px;height:5px;background:#e50914;border-radius:50%;display:inline-;}
+.sim-dot{width:5px;height:5px;background:#e50914;border-radius:50%;display:inline-block;}
 .tmdb-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:20px;font-size:.67rem;font-weight:700;border:1px solid rgba(250,204,21,.2);background:rgba(250,204,21,.06);color:#facc15;margin-left:4px;}
 .card-badges{display:flex;align-items:center;flex-wrap:wrap;gap:4px;}
 
@@ -142,7 +141,7 @@ header[data-testid="stHeader"]{
 .sb-sub{color:#333;font-size:.65rem;letter-spacing:.15em;text-transform:uppercase;margin-top:2px;}
 
 /* ── Stat  ── */
-.stat-{background:#111;border:1px solid #1a1a1a;border-radius:10px;padding:.8rem 1rem;margin-top:1.2rem;}
+.stat-block{background:#111;border:1px solid #1a1a1a;border-radius:10px;padding:.8rem 1rem;margin-top:1.2rem;}
 .stat-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;}
 .stat-label{color:#444;font-size:.7rem;}
 .stat-value{color:#777;font-size:.75rem;font-weight:600;}
@@ -1020,30 +1019,14 @@ with st.sidebar:
 # ── Hero ──────────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="hero">
-    <div class="hero-badge">🎬 Your Personal Cinema</div>
-    <h1 class="hero-title">Next<span class="hero-accent">Watch</span></h1>
-    <p class="hero-sub">Discover movies and series based on your taste.</p>
-    <div class="hero-pills">
-        <span class="hero-pill">Movies</span>
-        <span class="hero-pill">TV Shows</span>
-        <span class="hero-pill">Trending</span>
-        <span class="hero-pill">Wishlist</span>
-    </div>
-    <div class="hero-stats">
-        <div class="hero-stat">
-            <span class="hero-stat-n">TMDb</span>
-            <span class="hero-stat-l">Powered by</span>
-        </div>
-        <div class="hero-stat">
-            <span class="hero-stat-n">∞</span>
-            <span class="hero-stat-l">Movies &amp; Shows</span>
-        </div>
-        <div class="hero-stat" style="border-right:none">
-            <span class="hero-stat-n">Free</span>
-            <span class="hero-stat-l">Always</span>
-        </div>
-    </div>
-</div>""", unsafe_allow_html=True)
+    <h1 class="hero-title">
+        Next<span class="hero-accent">Watch</span>
+    </h1>
+    <p class="hero-sub">
+        Discover movies and series based on your taste.
+    </p>
+</div>
+""", unsafe_allow_html=True)
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
 tab_disc, tab_tv, tab_wish, tab_seen, tab_recs = st.tabs([
@@ -1353,19 +1336,18 @@ with tab_recs:
 # ── Auto-switch tab after Find Similar ───────────────────────────────────────
 if st.session_state._goto_tab:
     import streamlit.components.v1 as _cmp
-    _emoji = "🎬" if st.session_state._goto_tab == "movies" else "📺"
+    _target = "Movies" if st.session_state._goto_tab == "movies" else "TV Shows"
     _cmp.html(f"""<script>
     (function() {{
         var _switch = function() {{
             var tabs = window.parent.document.querySelectorAll('[data-baseweb="tab"]');
             for (var i = 0; i < tabs.length; i++) {{
-                if (tabs[i].textContent.indexOf('{_emoji}') !== -1) {{
+                if (tabs[i].textContent.indexOf('{_target}') !== -1) {{
                     tabs[i].click();
                     return;
                 }}
             }}
         }};
-        // Small delay to let Streamlit finish rendering the tab bar
         window.parent.setTimeout(_switch, 120);
     }})();
     </script>""", height=0)
