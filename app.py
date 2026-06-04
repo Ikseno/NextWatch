@@ -168,10 +168,6 @@ header[data-testid="stHeader"]{
 .wtw-name{font-size:.54rem;color:#555;text-align:center;max-width:54px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .wtw-none{font-size:.78rem;color:#333;font-style:italic;}
 
-/* Hide Streamlit controls */
-[data-testid="collapsedControl"]{
-    display:none !important;
-}
 button[title="View fullscreen"]{
     display:none !important;
 }
