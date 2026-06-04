@@ -22,7 +22,14 @@ st.markdown("""
 .stApp { background:#080808!important; color:#f0f0f0; }
 #MainMenu,footer,.stDeployButton,[data-testid="stToolbar"]{visibility:hidden!important;display:none!important;}
 [data-testid="stAppViewContainer"]{background:#080808;}
-[data-testid="block-container"]{padding-top:0!important;}
+[data-testid="block-container"]{
+    padding-top:0!important;
+    padding-left:2rem!important;
+    padding-right:2rem!important;
+}
+header[data-testid="stHeader"]{
+    display:none!important;
+}
 
 
 /* Sidebar */
@@ -114,7 +121,7 @@ st.markdown("""
 .genre-row{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:.42rem;}
 .gtag{background:#1a1a1a;color:#555;padding:2px 6px;border-radius:4px;font-size:.58rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;border:1px solid #222;}
 .sim-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:.67rem;font-weight:700;border:1px solid rgba(229,9,20,.25);background:rgba(229,9,20,.07);color:#ff4d4d;}
-.sim-dot{width:5px;height:5px;background:#e50914;border-radius:50%;display:inline-block;}
+.sim-dot{width:5px;height:5px;background:#e50914;border-radius:50%;display:inline-;}
 .tmdb-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:20px;font-size:.67rem;font-weight:700;border:1px solid rgba(250,204,21,.2);background:rgba(250,204,21,.06);color:#facc15;margin-left:4px;}
 .card-badges{display:flex;align-items:center;flex-wrap:wrap;gap:4px;}
 
@@ -134,8 +141,8 @@ st.markdown("""
 .sb-accent{color:#e50914;}
 .sb-sub{color:#333;font-size:.65rem;letter-spacing:.15em;text-transform:uppercase;margin-top:2px;}
 
-/* ── Stat block ── */
-.stat-block{background:#111;border:1px solid #1a1a1a;border-radius:10px;padding:.8rem 1rem;margin-top:1.2rem;}
+/* ── Stat  ── */
+.stat-{background:#111;border:1px solid #1a1a1a;border-radius:10px;padding:.8rem 1rem;margin-top:1.2rem;}
 .stat-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;}
 .stat-label{color:#444;font-size:.7rem;}
 .stat-value{color:#777;font-size:.75rem;font-weight:600;}
@@ -162,6 +169,16 @@ st.markdown("""
 .wtw-name{font-size:.54rem;color:#555;text-align:center;max-width:54px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .wtw-none{font-size:.78rem;color:#333;font-style:italic;}
 
+/* Hide Streamlit controls */
+[data-testid="collapsedControl"]{
+    display:none !important;
+}
+button[title="View fullscreen"]{
+    display:none !important;
+}
+button[title="Exit fullscreen"]{
+    display:none !important;
+}
 
 /* ── Beautiful dialog action buttons ── */
 [data-testid="stDialog"] .dlg-actions .stButton>button{
@@ -985,7 +1002,7 @@ with st.sidebar:
     st.markdown("""
     <div class="sb-brand">
         <div class="sb-brand-title">Next<span class="sb-accent">Watch</span></div>
-        <div class="sb-sub">Movie Discovery</div>
+        <div class="sb-sub">Recommendation System</div>
     </div>""", unsafe_allow_html=True)
 
     tmdb_api_key = st.secrets.get("TMDB_API_KEY", "")
@@ -1005,12 +1022,12 @@ st.markdown("""
 <div class="hero">
     <div class="hero-badge">🎬 Your Personal Cinema</div>
     <h1 class="hero-title">Next<span class="hero-accent">Watch</span></h1>
-    <p class="hero-sub">Discover movies &amp; series — powered by TMDb</p>
+    <p class="hero-sub">Discover movies and series based on your taste.</p>
     <div class="hero-pills">
-        <span class="hero-pill">🎬 Movies</span>
-        <span class="hero-pill">📺 TV Shows</span>
-        <span class="hero-pill">🔥 Trending</span>
-        <span class="hero-pill">🔖 Wishlist</span>
+        <span class="hero-pill">Movies</span>
+        <span class="hero-pill">TV Shows</span>
+        <span class="hero-pill">Trending</span>
+        <span class="hero-pill">Wishlist</span>
     </div>
     <div class="hero-stats">
         <div class="hero-stat">
@@ -1030,11 +1047,11 @@ st.markdown("""
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
 tab_disc, tab_tv, tab_wish, tab_seen, tab_recs = st.tabs([
-    "🎬 Movies",
-    "📺 TV Shows",
-    "🔖 Wishlist",
-    "✓ Watched",
-    "⭐ For You",
+    "Movies",
+    "TV Shows",
+    "Wishlist",
+    "Watched",
+    "For You",
 ])
 
 # ══ TAB 1 — Movies ═══════════════════════════════════════════════════════════
