@@ -222,6 +222,8 @@ def load_data():
     random_state=42
     )
     movie_latent = svd.fit_transform(item_matrix)
+    print("SVD trained!")
+    print(movie_latent.shape)
     svd_sim = cosine_similarity(movie_latent)
 
     
