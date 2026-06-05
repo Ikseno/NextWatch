@@ -218,15 +218,14 @@ def load_data():
     item_matrix = csr_matrix(user_movie.values).T.tocsr()
     
     svd = TruncatedSVD(
-    n_components=50,
-    random_state=42
+        n_components=50,
+        random_state=42
     )
     movie_latent = svd.fit_transform(item_matrix)
     print("SVD trained!")
     print(movie_latent.shape)
 
-    print("Explained variance:",
-      svd.explained_variance_ratio_.sum())
+    print("Explained variance:", svd.explained_variance_ratio_.sum())
     
     svd_sim = cosine_similarity(movie_latent)
 
@@ -234,9 +233,11 @@ def load_data():
     col_map = np.array([mid_to_col.get(int(mid), -1) for mid in movies2["movieId"]])
 
     return movies2, content_sim, indices, item_matrix, mid_to_col, col_map, n_ratings, svd_sim
+    
 
 
 movies, content_sim, indices, item_matrix, mid_to_col, col_map, n_ratings, svd_sim = load_data()
+st.sidebar.success(f"SVD loaded: {svd_sim.shape}")
 
 N_RECS = 20
 
