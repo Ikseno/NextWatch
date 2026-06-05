@@ -7,6 +7,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from scipy.sparse import csr_matrix
 from difflib import get_close_matches
+from sklearn.decomposition import TruncatedSVD
 
 st.set_page_config(
     page_title="NextWatch", page_icon="🎬", layout="wide",
@@ -215,12 +216,21 @@ def load_data():
     rated_ids = user_movie.columns.tolist()
     mid_to_col = {int(mid): i for i, mid in enumerate(rated_ids)}
     item_matrix = csr_matrix(user_movie.values).T.tocsr()
+    
+    svd = TruncatedSVD(
+    n_components=50,
+    random_state=42
+)
+movie_latent = svd.fit_transform(item_matrix)
+svd_sim = cosine_similarity(movie_latent)
+
+    
     col_map = np.array([mid_to_col.get(int(mid), -1) for mid in movies2["movieId"]])
 
-    return movies2, content_sim, indices, item_matrix, mid_to_col, col_map, n_ratings
+    return movies2, content_sim, indices, item_matrix, mid_to_col, col_map, n_ratings, svd_sim
 
 
-movies, content_sim, indices, item_matrix, mid_to_col, col_map, n_ratings = load_data()
+movies, content_sim, indices, item_matrix, mid_to_col, col_map, n_ratings, svd_sim = load_data()
 
 N_RECS = 20
 
@@ -528,7 +538,7 @@ def recommend(title, n=10):
     collab_scores = np.zeros(len(movies))
     if movie_id in mid_to_col:
         c = mid_to_col[movie_id]
-        sims = cosine_similarity(item_matrix[c], item_matrix).flatten()
+        sims = svd_sim[c]
         valid = col_map >= 0
         collab_scores[valid] = sims[col_map[valid]]
 
@@ -564,7 +574,7 @@ def recommend_multi(titles, n=10):
         cf = np.zeros(len(movies))
         if movie_id in mid_to_col:
             c = mid_to_col[movie_id]
-            sims = cosine_similarity(item_matrix[c], item_matrix).flatten()
+            sims = svd_sim[c]
             valid = col_map >= 0
             cf[valid] = sims[col_map[valid]]
 
