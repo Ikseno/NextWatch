@@ -524,10 +524,10 @@ def find_best_movie_title(title):
     for t in possible_titles:
         if t in indices:
             return t
-    matches = get_close_matches(title, candidates, n=1, cutoff=0.55)
+    matches = get_close_matches(title, candidates, n=1, cutoff=0.75)
     if matches:
         return matches[0]
-    matches = get_close_matches(normalize_for_csv(title), candidates, n=1, cutoff=0.55)
+    matches = get_close_matches(normalize_for_csv(title), candidates, n=1, cutoff=0.75)
     if matches:
         return matches[0]
     return None
@@ -565,14 +565,19 @@ def recommend(title, n=10):
 
 
 def recommend_multi(titles, n=10):
-    """Aggregate hybrid scores across multiple seed titles and return top-n recommendations."""
+    """Aggregate hybrid scores across multiple seed titles.
+    Returns (results_df, skipped_titles) where skipped_titles are seeds
+    not found in the local dataset.
+    """
     agg_content = np.zeros(len(movies))
     agg_collab  = np.zeros(len(movies))
     seed_idxs   = []
+    skipped     = []
 
     for title in titles:
         lookup = find_best_movie_title(title)
         if lookup is None:
+            skipped.append(clean_title(title))
             continue
         idx = int(indices[lookup])
         movie_id = int(movies.iloc[idx]["movieId"])
@@ -594,6 +599,7 @@ def recommend_multi(titles, n=10):
 
     if not seed_idxs:
         raise KeyError("None of the provided titles are in the dataset.")
+    # (skipped is returned alongside the df below)
 
     k = len(seed_idxs)
     agg_content /= k
@@ -608,7 +614,7 @@ def recommend_multi(titles, n=10):
     res["score"]   = [float(hybrid[i]) for i in top]
     res["c_score"] = [float(agg_content[i]) for i in top]
     res["k_score"] = [float(agg_collab[i]) for i in top]
-    return res
+    return res, skipped
 
 
 # ── Movie detail dialog ───────────────────────────────────────────────────────
@@ -1466,11 +1472,16 @@ with tab_recs:
                 unsafe_allow_html=True)
             try:
                 with st.spinner("Computing your recommendations..."):
-                    recs_for_you = recommend_multi(seed_titles, N_RECS)
+                    recs_for_you, skipped_titles = recommend_multi(seed_titles, N_RECS)
+                if skipped_titles:
+                    skipped_str = ", ".join(f'**{t}**' for t in skipped_titles)
+                    st.warning(f"Not in local dataset (skipped): {skipped_str}. Recommendations are based on the remaining films only.")
                 if not recs_for_you.empty:
                     render_grid(recs_for_you, tmdb_api_key, show_score=True, prefix="foryou")
+            except KeyError:
+                st.info("None of your top-rated films are in the local dataset yet — try rating films from the Movies tab.")
             except Exception:
-                st.info("Some titles in your watched list aren't in the local dataset yet — try rating different films.")
+                st.info("Something went wrong computing recommendations — try refreshing.")
 
 # ── Auto-switch tab after Find Similar ───────────────────────────────────────
 if st.session_state._goto_tab:
