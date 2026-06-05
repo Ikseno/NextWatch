@@ -220,9 +220,9 @@ def load_data():
     svd = TruncatedSVD(
     n_components=50,
     random_state=42
-)
-movie_latent = svd.fit_transform(item_matrix)
-svd_sim = cosine_similarity(movie_latent)
+    )
+    movie_latent = svd.fit_transform(item_matrix)
+    svd_sim = cosine_similarity(movie_latent)
 
     
     col_map = np.array([mid_to_col.get(int(mid), -1) for mid in movies2["movieId"]])
