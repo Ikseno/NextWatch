@@ -224,6 +224,10 @@ def load_data():
     movie_latent = svd.fit_transform(item_matrix)
     print("SVD trained!")
     print(movie_latent.shape)
+
+    print("Explained variance:",
+      svd.explained_variance_ratio_.sum())
+    
     svd_sim = cosine_similarity(movie_latent)
 
     
