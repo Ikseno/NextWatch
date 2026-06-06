@@ -5,9 +5,9 @@ import requests
 import re
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.preprocessing import normalize
 from scipy.sparse import csr_matrix
 from difflib import get_close_matches
-from sklearn.decomposition import TruncatedSVD
 
 st.set_page_config(
     page_title="NextWatch", page_icon="🎬", layout="wide",
@@ -216,28 +216,17 @@ def load_data():
     rated_ids = user_movie.columns.tolist()
     mid_to_col = {int(mid): i for i, mid in enumerate(rated_ids)}
     item_matrix = csr_matrix(user_movie.values).T.tocsr()
-    
-    svd = TruncatedSVD(
-        n_components=50,
-        random_state=42
-    )
-    movie_latent = svd.fit_transform(item_matrix)
-    print("SVD trained!")
-    print(movie_latent.shape)
 
-    print("Explained variance:", svd.explained_variance_ratio_.sum())
-    
-    svd_sim = cosine_similarity(movie_latent)
+    # L2-normalised item vectors for raw item-item cosine similarity (matches evaluate.py hybrid)
+    item_norm = normalize(item_matrix.toarray(), norm="l2")
 
-    
     col_map = np.array([mid_to_col.get(int(mid), -1) for mid in movies2["movieId"]])
 
-    return movies2, content_sim, indices, item_matrix, mid_to_col, col_map, n_ratings, svd_sim
+    return movies2, content_sim, indices, item_matrix, mid_to_col, col_map, n_ratings, item_norm
     
 
 
-movies, content_sim, indices, item_matrix, mid_to_col, col_map, n_ratings, svd_sim = load_data()
-st.sidebar.success(f"SVD loaded: {svd_sim.shape}")
+movies, content_sim, indices, item_matrix, mid_to_col, col_map, n_ratings, item_norm = load_data()
 
 N_RECS = 20
 
@@ -546,14 +535,14 @@ def recommend(title, n=10):
     collab_scores = np.zeros(len(movies))
     if movie_id in mid_to_col:
         c = mid_to_col[movie_id]
-        sims = svd_sim[c]
+        sims = item_norm[c] @ item_norm.T
         valid = col_map >= 0
         collab_scores[valid] = sims[col_map[valid]]
 
     if content_scores.max() > 0: content_scores /= content_scores.max()
     if collab_scores.max() > 0:  collab_scores  /= collab_scores.max()
 
-    hybrid = 0.6 * content_scores + 0.4 * collab_scores
+    hybrid = 0.1 * content_scores + 0.9 * collab_scores
     hybrid[idx] = -1
 
     top = np.argsort(hybrid)[::-1][:n]
@@ -587,7 +576,7 @@ def recommend_multi(titles, n=10):
         cf = np.zeros(len(movies))
         if movie_id in mid_to_col:
             c = mid_to_col[movie_id]
-            sims = svd_sim[c]
+            sims = item_norm[c] @ item_norm.T
             valid = col_map >= 0
             cf[valid] = sims[col_map[valid]]
 
@@ -605,7 +594,7 @@ def recommend_multi(titles, n=10):
     agg_content /= k
     agg_collab  /= k
 
-    hybrid = 0.6 * agg_content + 0.4 * agg_collab
+    hybrid = 0.1 * agg_content + 0.9 * agg_collab
     for idx in seed_idxs:
         hybrid[idx] = -1
 
