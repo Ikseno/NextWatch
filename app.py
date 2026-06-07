@@ -11,7 +11,6 @@ from difflib import get_close_matches
 
 st.set_page_config(
     page_title="NextWatch", page_icon="🎬", layout="wide",
-    initial_sidebar_state="expanded",
 )
 
 # ── CSS ────────────────────────────────────────────────────────────────────────
@@ -1005,24 +1004,7 @@ def _watched_items(api_key):
             <div class="empty-text">Nothing watched yet</div>
         </div>""", unsafe_allow_html=True)
 
-# ── Sidebar ───────────────────────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("""
-    <div class="sb-brand">
-        <div class="sb-brand-title">Next<span class="sb-accent">Watch</span></div>
-        <div class="sb-sub">Recommendation System</div>
-    </div>""", unsafe_allow_html=True)
-
-    tmdb_api_key = st.secrets.get("TMDB_API_KEY", "")
-
-    st.markdown(f"""
-    <div class="stat-block">
-        <div class="stat-title">Dataset</div>
-        <div class="stat-row"><span class="stat-label">Movies</span><span class="stat-value">{len(movies):,}</span></div>
-        <div class="stat-row"><span class="stat-label">Ratings</span><span class="stat-value">{n_ratings:,}</span></div>
-        <div class="stat-row"><span class="stat-label">Wishlist</span><span class="stat-value">{len(st.session_state.wishlist)}</span></div>
-        <div class="stat-row"><span class="stat-label">Watched</span><span class="stat-value">{len(st.session_state.watched)}</span></div>
-    </div>""", unsafe_allow_html=True)
+tmdb_api_key = st.secrets.get("TMDB_API_KEY", "")
 
 
 # ── Hero ──────────────────────────────────────────────────────────────────────
