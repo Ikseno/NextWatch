@@ -347,8 +347,9 @@ def search_tv(query, api_key):
     try:
         r = requests.get(
             "https://api.themoviedb.org/3/search/tv",
-            params={"api_key": api_key, "query": query, "language": "en-US"}, timeout=5
+            params={"api_key": api_key, "query": query, "language": "en-US"}, timeout=15
         )
+        r.raise_for_status()
         return r.json().get("results", [])[:8]
     except Exception:
         return []
@@ -456,8 +457,9 @@ def search_movies_tmdb(query, api_key):
     try:
         r = requests.get(
             "https://api.themoviedb.org/3/search/movie",
-            params={"api_key": api_key, "query": query, "language": "en-US"}, timeout=5
+            params={"api_key": api_key, "query": query, "language": "en-US"}, timeout=15
         )
+        r.raise_for_status()
         return r.json().get("results", [])[:8]
     except Exception:
         return []
