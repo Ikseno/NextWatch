@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <b>Machine Learning Project · Hanyang University ERICA</b><br/>
+  <b>Machine Learning Project · Hanyang University</b><br/>
   <a href="https://nextwa7ch.streamlit.app">🌐 Live Demo</a>
 </p>
 
@@ -246,4 +246,4 @@ The dataset covers user ratings up to **2017**. Films released after this date h
 
 ---
 
-*Machine Learning Project · Hanyang University ERICA · 2024*
+*Machine Learning Project · Hanyang University · 2026*
